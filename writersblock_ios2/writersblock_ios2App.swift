@@ -9,9 +9,23 @@ import SwiftUI
 
 @main
 struct writersblock_ios2App: App {
+    @State private var selectedTab = 0
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            TabBarView(selectedTab: $selectedTab) {
+                Group {
+                    if selectedTab == 0 {
+                        ContentView()
+                    } else if selectedTab == 1 {
+                        WritingLogView()
+                    } else if selectedTab == 2 {
+                        AnalyticsView()
+                    } else if selectedTab == 3 {
+                        SettingsView()
+                    }
+                }
+            }
         }
     }
 }
