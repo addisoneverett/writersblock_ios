@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Foundation
 
 struct ContentView: View {
     @EnvironmentObject var writingStateManager: WritingStateManager
@@ -17,6 +18,12 @@ struct ContentView: View {
     @State private var showingPrompt = false
     @State private var generatedPrompt = ""
     @State private var showPrompt = false
+    @State private var showTagSelection = false
+    @State private var selectedTags: [Tag] = []
+    @State private var availableTags: [Tag] = []
+    @State private var showFolderSelection = false
+    @State private var folders: [Folder] = []
+    @State private var selectedFolderId: UUID?
 
     var body: some View {
         GeometryReader { geometry in
@@ -68,6 +75,41 @@ struct ContentView: View {
                                     .foregroundColor(.secondary.opacity(0.2)),
                                 alignment: .bottom
                             )
+                        }
+                        
+                        // Display selected tags
+                        if !selectedTags.isEmpty {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(selectedTags) { tag in
+                                        Text(tag.name)
+                                            .font(.typewriter(size: 6))  // Changed from 12 to 6
+                                            .padding(.horizontal, 4)     // Reduced padding
+                                            .padding(.vertical, 2)       // Reduced padding
+                                            .background(tag.color.opacity(0.1))
+                                            .cornerRadius(2)             // Reduced corner radius
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+                            .padding(.vertical, 4)  // Reduced vertical padding
+                            .background(Color(.systemBackground))
+                            .overlay(
+                                Rectangle()
+                                    .frame(height: 1)
+                                    .foregroundColor(.secondary.opacity(0.2)),
+                                alignment: .bottom
+                            )
+                        }
+                        
+                        // Folder location preview
+                        if let selectedFolderId = selectedFolderId,
+                           let folderName = folders.first(where: { $0.id == selectedFolderId })?.name {
+                            Text(folderName)
+                                .font(.typewriter(size: 6))  // Changed from 8 to 6
+                                .foregroundColor(.gray)
+                                .padding(.top, 2)
+                                .padding(.horizontal)
                         }
                         
                         RichTextEditor(text: Binding(
@@ -177,6 +219,19 @@ struct ContentView: View {
                                 showAccordionMenu = false
                             }
                         }
+                        Button("Add tags") {
+                            loadAvailableTags()
+                            showTagSelection = true
+                            withAnimation(.spring()) {
+                                showAccordionMenu = false
+                            }
+                        }
+                        Button("Add to Folder") {
+                            showFolderSelection = true
+                            withAnimation(.spring()) {
+                                showAccordionMenu = false
+                            }
+                        }
                     }
                     .font(.typewriter(size: 16))
                     .foregroundColor(.black)
@@ -201,7 +256,14 @@ struct ContentView: View {
         )
         .onAppear {
             loadEntries()
+            loadFolders()
             updateWordCount()
+        }
+        .sheet(isPresented: $showTagSelection) {
+            TagSelectionView(availableTags: $availableTags, selectedTags: $selectedTags)
+        }
+        .sheet(isPresented: $showFolderSelection) {
+            FolderSelectionView(folders: $folders, selectedFolderId: $selectedFolderId)
         }
     }
     
@@ -217,11 +279,29 @@ struct ContentView: View {
     private func saveEntry() {
         guard !writingStateManager.content.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         
-        let entry = WritingEntry(title: writingStateManager.title.isEmpty ? "New Entry" : writingStateManager.title, text: writingStateManager.content.string, date: Date(), wordCount: writingStateManager.currentWordCount)
-        entries.append(entry)
-        saveEntriesToUserDefaults()
+        let entry = WritingEntry(title: writingStateManager.title.isEmpty ? "New Entry" : writingStateManager.title,
+                                 text: writingStateManager.content.string,
+                                 date: Date(),
+                                 wordCount: writingStateManager.currentWordCount,
+                                 tags: selectedTags)
+        
+        if let selectedFolderId = selectedFolderId,
+           let folderIndex = folders.firstIndex(where: { $0.id == selectedFolderId }) {
+            folders[folderIndex].entries.append(entry)
+        } else {
+            // If no folder is selected, add to "All Entries"
+            if let allEntriesIndex = folders.firstIndex(where: { $0.name == "All Entries" }) {
+                folders[allEntriesIndex].entries.append(entry)
+            } else {
+                folders.append(Folder(name: "All Entries", entries: [entry]))
+            }
+        }
+        
+        saveFolders()
         
         writingStateManager.clearContent()
+        selectedTags.removeAll()
+        selectedFolderId = nil
         
         withAnimation {
             showSavedMessage = true
@@ -267,20 +347,221 @@ struct ContentView: View {
         ]
         return prompts.randomElement() ?? "Write about your perfect day."
     }
+
+    private func loadAvailableTags() {
+        if let savedTags = UserDefaults.standard.data(forKey: "writingTags") {
+            let decoder = JSONDecoder()
+            if let decodedTags = try? decoder.decode([Tag].self, from: savedTags) {
+                availableTags = decodedTags
+            }
+        }
+    }
+
+    private func loadFolders() {
+        if let savedFolders = UserDefaults.standard.data(forKey: "writingFolders") {
+            let decoder = JSONDecoder()
+            if let decodedFolders = try? decoder.decode([Folder].self, from: savedFolders) {
+                folders = decodedFolders
+            }
+        }
+        
+        if folders.isEmpty {
+            folders = [Folder(name: "All Entries")]
+        }
+    }
+
+    private func saveFolders() {
+        let encoder = JSONEncoder()
+        if let encoded = try? encoder.encode(folders) {
+            UserDefaults.standard.set(encoded, forKey: "writingFolders")
+        }
+    }
 }
 
-struct WritingEntry: Codable, Identifiable {
+struct WritingEntry: Codable, Identifiable, Equatable {
     var id: UUID
     var title: String
     var text: String
     let date: Date
     var wordCount: Int
+    var tags: [Tag]
     
-    init(id: UUID = UUID(), title: String, text: String, date: Date, wordCount: Int) {
+    init(id: UUID = UUID(), title: String, text: String, date: Date, wordCount: Int, tags: [Tag] = []) {
         self.id = id
         self.title = title
         self.text = text
         self.date = date
         self.wordCount = wordCount
+        self.tags = tags
+    }
+}
+
+struct Tag: Codable, Identifiable, Equatable, Hashable {
+    let id: UUID
+    var name: String
+    var color: Color
+    
+    enum CodingKeys: String, CodingKey {
+        case id, name, color
+    }
+    
+    init(id: UUID = UUID(), name: String, color: Color) {
+        self.id = id
+        self.name = name
+        self.color = color
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        let colorData = try container.decode(Data.self, forKey: .color)
+        color = try NSKeyedUnarchiver.unarchivedObject(ofClass: UIColor.self, from: colorData)?.color ?? .blue
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        let colorData = try NSKeyedArchiver.archivedData(withRootObject: UIColor(color), requiringSecureCoding: false)
+        try container.encode(colorData, forKey: .color)
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
+extension Color {
+    var uiColor: UIColor {
+        UIColor(self)
+    }
+}
+
+extension UIColor {
+    var color: Color {
+        Color(self)
+    }
+}
+
+struct TagSelectionView: View {
+    @Binding var availableTags: [Tag]
+    @Binding var selectedTags: [Tag]
+    @State private var newTagName: String = ""
+    @State private var newTagColor: Color = .blue
+    @Environment(\.presentationMode) var presentationMode
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section(header: Text("Add New Tag")) {
+                    HStack {
+                        TextField("New tag", text: $newTagName)
+                        ColorPicker("", selection: $newTagColor)
+                        Button("Add") {
+                            if !newTagName.isEmpty && !availableTags.contains(where: { $0.name == newTagName }) {
+                                let newTag = Tag(name: newTagName, color: newTagColor)
+                                availableTags.append(newTag)
+                                selectedTags.append(newTag)
+                                newTagName = ""
+                                newTagColor = .blue
+                                saveTags()
+                            }
+                        }
+                    }
+                }
+
+                Section(header: Text("Select Tags")) {
+                    ForEach(availableTags) { tag in
+                        MultipleSelectionRow(title: tag.name, color: tag.color, isSelected: selectedTags.contains(tag)) {
+                            if selectedTags.contains(tag) {
+                                selectedTags.removeAll { $0.id == tag.id }
+                            } else {
+                                selectedTags.append(tag)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Select Tags")
+            .navigationBarItems(trailing: Button("Done") {
+                presentationMode.wrappedValue.dismiss()
+            })
+        }
+    }
+
+    private func saveTags() {
+        if let encoded = try? JSONEncoder().encode(availableTags) {
+            UserDefaults.standard.set(encoded, forKey: "writingTags")
+        }
+    }
+}
+
+struct MultipleSelectionRow: View {
+    var title: String
+    var color: Color
+    var isSelected: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: self.action) {
+            HStack {
+                Circle()
+                    .fill(color)
+                    .frame(width: 20, height: 20)
+                Text(self.title)
+                if self.isSelected {
+                    Spacer()
+                    Image(systemName: "checkmark")
+                }
+            }
+        }
+    }
+}
+
+struct FolderSelectionView: View {
+    @Binding var folders: [Folder]
+    @Binding var selectedFolderId: UUID?
+    @State private var newFolderName = ""
+    @Environment(\.presentationMode) var presentationMode
+
+    var body: some View {
+        NavigationView {
+            List {
+                ForEach(folders) { folder in
+                    Button(action: {
+                        selectedFolderId = folder.id
+                        presentationMode.wrappedValue.dismiss()
+                    }) {
+                        Text(folder.name)
+                    }
+                }
+                
+                Section(header: Text("Create New Folder")) {
+                    HStack {
+                        TextField("New Folder Name", text: $newFolderName)
+                        Button("Create") {
+                            if !newFolderName.isEmpty {
+                                let newFolder = Folder(name: newFolderName)
+                                folders.append(newFolder)
+                                newFolderName = ""
+                                saveFolders()
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Select Folder")
+            .navigationBarItems(trailing: Button("Cancel") {
+                presentationMode.wrappedValue.dismiss()
+            })
+        }
+    }
+    
+    private func saveFolders() {
+        let encoder = JSONEncoder()
+        if let encoded = try? encoder.encode(folders) {
+            UserDefaults.standard.set(encoded, forKey: "writingFolders")
+        }
     }
 }

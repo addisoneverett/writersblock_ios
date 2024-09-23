@@ -26,7 +26,7 @@ struct AnalyticsView: View {
             }
             .padding()
         }
-        .navigationTitle("Analytics")
+        .navigationBarHidden(true)
         .onAppear(perform: loadEntriesAndCalculateAnalytics)
     }
     
@@ -179,18 +179,119 @@ struct RankView: View {
 
 struct CalendarView: View {
     let entries: [WritingEntry]
+    @State private var currentDate = Date()
     
     var body: some View {
-        VStack {
-            Text("Writing Calendar")
-                .font(.system(size: 16, weight: .medium, design: .monospaced))
+        VStack(spacing: 10) {
+            HStack {
+                Button(action: { changeMonth(by: -1) }) {
+                    Image(systemName: "chevron.left")
+                }
+                Spacer()
+                Text(monthYearString(from: currentDate))
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                Spacer()
+                Button(action: { changeMonth(by: 1) }) {
+                    Image(systemName: "chevron.right")
+                }
+            }
+            .padding(.horizontal)
             
-            // Implement calendar view here
-            Text("Calendar placeholder")
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 8) {
+                ForEach(daysInMonth(), id: \.self) { date in
+                    if let date = date {
+                        CalendarCell(date: date, status: getEntryStatus(for: date))
+                    } else {
+                        Color.clear
+                    }
+                }
+            }
         }
         .padding()
         .background(Color.white)
         .cornerRadius(10)
         .shadow(radius: 5)
+    }
+    
+    private func changeMonth(by value: Int) {
+        if let newDate = Calendar.current.date(byAdding: .month, value: value, to: currentDate) {
+            currentDate = newDate
+        }
+    }
+    
+    private func monthYearString(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM yyyy"
+        return formatter.string(from: date)
+    }
+    
+    private func daysInMonth() -> [Date?] {
+        let calendar = Calendar.current
+        let range = calendar.range(of: .day, in: .month, for: currentDate)!
+        let firstDayOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: currentDate))!
+        let firstWeekday = calendar.component(.weekday, from: firstDayOfMonth)
+        
+        var days: [Date?] = Array(repeating: nil, count: firstWeekday - 1)
+        for day in 1...range.count {
+            if let date = calendar.date(byAdding: .day, value: day - 1, to: firstDayOfMonth) {
+                days.append(date)
+            }
+        }
+        
+        while days.count < 42 {
+            days.append(nil)
+        }
+        
+        return days
+    }
+    
+    private func getEntryStatus(for date: Date) -> EntryStatus {
+        let calendar = Calendar.current
+        if let firstEntry = entries.sorted(by: { $0.date < $1.date }).first,
+           date < calendar.startOfDay(for: firstEntry.date) {
+            return .beforeApp
+        } else if calendar.isDateInToday(date) || date <= Date() {
+            if entries.contains(where: { calendar.isDate($0.date, inSameDayAs: date) }) {
+                return .completed
+            } else {
+                return .missed
+            }
+        } else {
+            return .future
+        }
+    }
+}
+
+enum EntryStatus {
+    case completed, missed, future, beforeApp
+}
+
+struct CalendarCell: View {
+    let date: Date
+    let status: EntryStatus
+    
+    var body: some View {
+        Group {
+            switch status {
+            case .completed:
+                Text("🔥")
+                    .font(.system(size: 18))
+            case .missed:
+                Text("✗")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.red)
+            case .future, .beforeApp:
+                Text(dayNumber)
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundColor(status == .future ? .secondary : .primary)
+            }
+        }
+        .frame(height: 30)
+    }
+    
+    private var dayNumber: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d"
+        return formatter.string(from: date)
     }
 }
