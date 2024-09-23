@@ -1,72 +1,48 @@
 import SwiftUI
 
 struct WritingLogView: View {
-    @State private var searchText = ""
-    @State private var sortOption = "Date"
     @State private var entries: [WritingEntry] = []
-    @State private var selectedEntry: WritingEntry?
-    @State private var showingEntryDetail = false
-    
+    @State private var selectedEntryId: UUID?
+    @State private var isEditViewPresented = false
+    @State private var entryToDelete: WritingEntry?
+    @State private var showDeleteConfirmation = false
+
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                TextField("Search entries...", text: $searchText)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .frame(maxWidth: .infinity)
-                
-                Picker("Sort", selection: $sortOption) {
-                    Text("Date").tag("Date")
-                    Text("Title").tag("Title")
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                ForEach(entries.sorted(by: { $0.date > $1.date })) { entry in
+                    EntryCard(entry: entry, onEdit: {
+                        selectedEntryId = entry.id
+                        isEditViewPresented = true
+                    }, onDelete: {
+                        entryToDelete = entry
+                        showDeleteConfirmation = true
+                    })
                 }
-                .pickerStyle(MenuPickerStyle())
-                .frame(width: 100)
             }
             .padding()
-            .background(Color(.systemBackground))
-            .overlay(
-                Rectangle()
-                    .frame(height: 1)
-                    .foregroundColor(.secondary.opacity(0.2)),
-                alignment: .bottom
-            )
-            
-            // Main content
-            ScrollView {
-                LazyVStack(spacing: 10) {
-                    ForEach(filteredAndSortedEntries) { entry in
-                        EntryCardView(entry: entry, onDelete: { deleteEntry(entry) })
-                            .onTapGesture {
-                                selectedEntry = entry
-                                showingEntryDetail = true
-                            }
-                    }
-                }
-                .padding()
-            }
         }
+        .navigationTitle("Writing Log")
         .onAppear(perform: loadEntries)
-        .sheet(isPresented: $showingEntryDetail) {
-            if let entry = selectedEntry {
-                EntryDetailView(entry: entry, onSave: updateEntry)
+        .sheet(isPresented: $isEditViewPresented, onDismiss: saveEntries) {
+            if let entryId = selectedEntryId,
+               let entryIndex = entries.firstIndex(where: { $0.id == entryId }) {
+                EditEntryView(entry: $entries[entryIndex])
+            }
+        }
+        .confirmationDialog("Are you sure you want to delete this entry?",
+                            isPresented: $showDeleteConfirmation,
+                            titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                if let entryToDelete = entryToDelete,
+                   let index = entries.firstIndex(where: { $0.id == entryToDelete.id }) {
+                    entries.remove(at: index)
+                    saveEntries()
+                }
             }
         }
     }
-    
-    private var filteredAndSortedEntries: [WritingEntry] {
-        let filtered = entries.filter { entry in
-            searchText.isEmpty || entry.title.localizedCaseInsensitiveContains(searchText) || entry.text.localizedCaseInsensitiveContains(searchText)
-        }
-        
-        return filtered.sorted { (entry1, entry2) in
-            if sortOption == "Date" {
-                return entry1.date > entry2.date
-            } else {
-                return entry1.title < entry2.title
-            }
-        }
-    }
-    
+
     private func loadEntries() {
         if let savedEntries = UserDefaults.standard.data(forKey: "writingEntries") {
             let decoder = JSONDecoder()
@@ -75,21 +51,7 @@ struct WritingLogView: View {
             }
         }
     }
-    
-    private func deleteEntry(_ entry: WritingEntry) {
-        entries.removeAll { $0.id == entry.id }
-        saveEntries()
-    }
-    
-    private func updateEntry(_ updatedEntry: WritingEntry) {
-        if let index = entries.firstIndex(where: { $0.id == updatedEntry.id }) {
-            var newEntry = updatedEntry
-            newEntry.wordCount = updatedEntry.text.split(separator: " ").count
-            entries[index] = newEntry
-            saveEntries()
-        }
-    }
-    
+
     private func saveEntries() {
         let encoder = JSONEncoder()
         if let encoded = try? encoder.encode(entries) {
@@ -98,51 +60,81 @@ struct WritingLogView: View {
     }
 }
 
-struct EntryCardView: View {
+struct EntryCard: View {
     let entry: WritingEntry
+    let onEdit: () -> Void
     let onDelete: () -> Void
-    
+
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(entry.title.isEmpty ? "New Entry" : entry.title)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(entry.title)
                     .font(.headline)
-                Text(entry.date, style: .date)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                Text(entry.text.prefix(50) + (entry.text.count > 50 ? "..." : ""))
-                    .font(.body)
-                    .lineLimit(2)
+                    .lineLimit(1)
+                Spacer()
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .foregroundColor(.red)
+                }
             }
-            Spacer()
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-                    .foregroundColor(.red)
+            
+            Text(entry.text)
+                .font(.subheadline)
+                .lineLimit(1)
+                .foregroundColor(.secondary)
+            
+            HStack {
+                Text("\(entry.wordCount) words")
+                    .font(.caption)
+                    .foregroundColor(.blue)
+                
+                Spacer()
+                
+                Text(entry.date, style: .date)
+                    .font(.caption)
+                    .foregroundColor(.gray)
             }
         }
         .padding()
-        .background(Color.white)
+        .background(Color(.systemBackground))
         .cornerRadius(10)
-        .shadow(radius: 5)
+        .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+        .onTapGesture(perform: onEdit)
     }
 }
 
-struct EntryDetailView: View {
+struct EditEntryView: View {
+    @Binding var entry: WritingEntry
     @Environment(\.presentationMode) var presentationMode
-    @State private var editedEntry: WritingEntry
-    let onSave: (WritingEntry) -> Void
-    
-    init(entry: WritingEntry, onSave: @escaping (WritingEntry) -> Void) {
-        _editedEntry = State(initialValue: entry)
-        self.onSave = onSave
-    }
-    
+
+    @State private var title: String = ""
+    @State private var text: String = ""
+
     var body: some View {
         NavigationView {
             Form {
-                TextField("Title", text: $editedEntry.title)
-                TextEditor(text: $editedEntry.text)
-                    .frame(minHeight: 200)
+                Section(header: Text("Entry Details")) {
+                    TextField("Title", text: $title)
+                    TextEditor(text: $text)
+                }
+                
+                Section(header: Text("Statistics")) {
+                    HStack {
+                        Text("Word Count:")
+                        Spacer()
+                        Text("\(text.split(separator: " ").count)")
+                    }
+                    HStack {
+                        Text("Date:")
+                        Spacer()
+                        Text(entry.date, style: .date)
+                    }
+                    HStack {
+                        Text("Time:")
+                        Spacer()
+                        Text(entry.date, style: .time)
+                    }
+                }
             }
             .navigationTitle("Edit Entry")
             .navigationBarItems(
@@ -150,16 +142,20 @@ struct EntryDetailView: View {
                     presentationMode.wrappedValue.dismiss()
                 },
                 trailing: Button("Save") {
-                    onSave(editedEntry)
+                    saveChanges()
                     presentationMode.wrappedValue.dismiss()
                 }
             )
         }
+        .onAppear {
+            title = entry.title
+            text = entry.text
+        }
     }
-}
 
-struct WritingLogView_Previews: PreviewProvider {
-    static var previews: some View {
-        WritingLogView()
+    private func saveChanges() {
+        entry.title = title
+        entry.text = text
+        entry.wordCount = text.split(separator: " ").count
     }
 }

@@ -8,22 +8,22 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var content: String = ""
-    @State private var title: String = ""
-    @State private var showTitle: Bool = false
-    @State private var wordCount: Int = 0
-    @State private var wordCountGoal: Int = max(UserDefaults.standard.integer(forKey: "wordCountGoal"), 1)
+    @EnvironmentObject var writingStateManager: WritingStateManager
+    @AppStorage("wordCountGoal") private var wordCountGoal: Int = 500
     @State private var progress: Float = 0
     @State private var showSavedMessage: Bool = false
-    @State private var activeView: Int = 0
     @State private var entries: [WritingEntry] = []
-    
+    @State private var showAccordionMenu: Bool = false
+    @State private var showingPrompt = false
+    @State private var generatedPrompt = ""
+    @State private var showPrompt = false
+
     var body: some View {
         GeometryReader { geometry in
             VStack(spacing: 0) {
                 // Header
                 HStack {
-                    Text("\(wordCount) / \(wordCountGoal)")
+                    Text("\(writingStateManager.currentWordCount) / \(wordCountGoal)")
                         .font(.typewriter(size: 14))
                         .fontWeight(.medium)
                     
@@ -49,13 +49,13 @@ struct ContentView: View {
                 // Main content
                 ScrollView {
                     VStack(spacing: 0) {
-                        if showTitle {
+                        if writingStateManager.showTitle {
                             HStack {
-                                TextField("Enter title...", text: $title)
+                                TextField("Enter title...", text: $writingStateManager.title)
                                     .font(.typewriter(size: 20))
                                     .fontWeight(.bold)
-                                
-                                Button(action: { showTitle = false }) {
+                                    
+                                Button(action: { writingStateManager.showTitle = false }) {
                                     Image(systemName: "xmark")
                                         .foregroundColor(.secondary)
                                 }
@@ -70,17 +70,43 @@ struct ContentView: View {
                             )
                         }
                         
-                        TextEditor(text: $content)
-                            .font(.typewriterBody)
-                            .padding()
-                            .frame(minHeight: geometry.size.height - 200) // Adjust this value as needed
-                            .onChange(of: content) { oldValue, newValue in
+                        RichTextEditor(text: Binding(
+                            get: { self.writingStateManager.content },
+                            set: { self.writingStateManager.content = $0 }
+                        ), font: .systemFont(ofSize: 16))
+                            .frame(minHeight: geometry.size.height - 200)
+                            .onChange(of: writingStateManager.content) { oldValue, newValue in
                                 updateWordCount()
                             }
                     }
                 }
-                .frame(height: geometry.size.height - 110)
-                
+                .frame(height: geometry.size.height - 200)
+
+                Spacer()
+
+                // Writing Prompt Box (if shown)
+                if showPrompt {
+                    HStack {
+                        Text(generatedPrompt)
+                            .font(.typewriter(size: 12))
+                            .italic()
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        Button(action: {
+                            showPrompt = false
+                        }) {
+                            Image(systemName: "xmark")
+                                .foregroundColor(.secondary)
+                                .font(.typewriter(size: 10))
+                        }
+                    }
+                    .padding(8)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(8)
+                    .padding(.horizontal)
+                }
+
                 // Save button and options
                 HStack {
                     Button("Save") {
@@ -94,11 +120,14 @@ struct ContentView: View {
                     .cornerRadius(8)
                     
                     Button(action: {
-                        // Add action for ellipsis button here
+                        withAnimation(.spring()) {
+                            showAccordionMenu.toggle()
+                        }
                     }) {
-                        Image(systemName: "ellipsis") // Changed from "text.quote" to "ellipsis"
+                        Image(systemName: "ellipsis")
                             .font(.title2)
                             .foregroundColor(.black)
+                            .rotationEffect(.degrees(90))
                     }
                     .padding(.leading, 10)
                 }
@@ -112,6 +141,51 @@ struct ContentView: View {
                     alignment: .top
                 )
             }
+            .gesture(
+                TapGesture()
+                    .onEnded { _ in
+                        if showAccordionMenu {
+                            withAnimation(.spring()) {
+                                showAccordionMenu = false
+                            }
+                        }
+                    }
+            )
+            
+            // Accordion Menu
+            VStack {
+                Spacer()
+                if showAccordionMenu {
+                    VStack(alignment: .trailing, spacing: 20) {
+                        Button("Add a title") {
+                            writingStateManager.showTitle = true
+                            withAnimation(.spring()) {
+                                showAccordionMenu = false
+                            }
+                        }
+                        Button("Generate Writing Prompt") {
+                            generatedPrompt = generateWritingPrompt()
+                            showPrompt = true
+                            withAnimation(.spring()) {
+                                showAccordionMenu = false
+                            }
+                        }
+                        Button("Scan a document") {
+                            // Implement document scanning
+                            print("Scan a document")
+                            withAnimation(.spring()) {
+                                showAccordionMenu = false
+                            }
+                        }
+                    }
+                    .font(.typewriter(size: 16))
+                    .foregroundColor(.black)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .padding(.vertical, 10)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.bottom, 80)
         }
         .background(Color(.systemBackground))
         .overlay(
@@ -127,34 +201,27 @@ struct ContentView: View {
         )
         .onAppear {
             loadEntries()
-            NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { _ in
-                self.wordCountGoal = UserDefaults.standard.integer(forKey: "wordCountGoal")
-                self.updateWordCount()
-            }
+            updateWordCount()
         }
     }
     
     private func updateWordCount() {
-        let words = content.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: " ")
-        wordCount = words.isEmpty ? 0 : words.count
-        
+        writingStateManager.updateWordCount()
         if wordCountGoal > 0 {
-            progress = min(Float(wordCount) / Float(wordCountGoal), 1.0)
+            progress = min(Float(writingStateManager.currentWordCount) / Float(wordCountGoal), 1.0)
         } else {
             progress = 0
         }
     }
     
     private func saveEntry() {
-        guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard !writingStateManager.content.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         
-        let entry = WritingEntry(title: title.isEmpty ? "Untitled" : title, text: content, date: Date(), wordCount: wordCount)
+        let entry = WritingEntry(title: writingStateManager.title.isEmpty ? "New Entry" : writingStateManager.title, text: writingStateManager.content.string, date: Date(), wordCount: writingStateManager.currentWordCount)
         entries.append(entry)
         saveEntriesToUserDefaults()
         
-        content = ""
-        title = ""
-        showTitle = false
+        writingStateManager.clearContent()
         
         withAnimation {
             showSavedMessage = true
@@ -184,14 +251,30 @@ struct ContentView: View {
             UserDefaults.standard.set(encoded, forKey: "writingEntries")
         }
     }
+    
+    private func generateWritingPrompt() -> String {
+        let prompts = [
+            "Write about a character who discovers a hidden door in their house.",
+            "Describe a world where everyone has a superpower, except for one person.",
+            "Tell a story that takes place entirely in an elevator.",
+            "Write about a day in the life of a sentient cloud.",
+            "Describe a future where books are forbidden.",
+            "Write about a character who wakes up one day speaking a language they don't know.",
+            "Tell a story about the last person on Earth.",
+            "Describe an encounter with a mythical creature in a modern city.",
+            "Write about a character who can taste colors.",
+            "Tell a story that begins and ends with the same sentence."
+        ]
+        return prompts.randomElement() ?? "Write about your perfect day."
+    }
 }
 
 struct WritingEntry: Codable, Identifiable {
     var id: UUID
-    var title: String  // Changed from 'let' to 'var'
-    var text: String   // Changed from 'let' to 'var'
+    var title: String
+    var text: String
     let date: Date
-    var wordCount: Int // Changed from 'let' to 'var' to allow updates
+    var wordCount: Int
     
     init(id: UUID = UUID(), title: String, text: String, date: Date, wordCount: Int) {
         self.id = id

@@ -7,7 +7,7 @@ extension Font {
     }
     
     static var typewriterBody: Font {
-        return typewriter(size: 16)
+        return typewriter(size: 10) // Changed from 12 to 10
     }
     
     static var typewriterTitle: Font {

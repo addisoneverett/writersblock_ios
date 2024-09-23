@@ -1,12 +1,23 @@
 import SwiftUI
 
+struct Analytics {
+    var totalWords: Int = 0
+    var streak: Int = 0
+    var avgWordsPerDay: Int = 0
+    var avgGoalTime: String = "00:00"
+    var totalPages: Int = 0
+    var rank: String = "Word Dabbler"
+    var nextRank: String = "Novice Scribe"
+    var progressToNextRank: Double = 0.0
+}
+
 struct AnalyticsView: View {
     @State private var analytics: Analytics = Analytics()
     @State private var entries: [WritingEntry] = []
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: 30) {
                 TotalWordsView(totalWords: analytics.totalWords)
                 ComparisonTextView(totalWords: analytics.totalWords)
                 StatisticsGridView(analytics: analytics)
@@ -15,6 +26,7 @@ struct AnalyticsView: View {
             }
             .padding()
         }
+        .navigationTitle("Analytics")
         .onAppear(perform: loadEntriesAndCalculateAnalytics)
     }
     
@@ -64,20 +76,9 @@ struct AnalyticsView: View {
     }
     
     private func calculateProgressToNextRank(totalWords: Int, currentRank: String) -> Double {
-        // Implement progress calculation logic
+        // Implement progress to next rank calculation logic
         return 0.5
     }
-}
-
-struct Analytics {
-    var totalWords: Int = 0
-    var streak: Int = 0
-    var avgWordsPerDay: Int = 0
-    var avgGoalTime: String = "00:00"
-    var totalPages: Int = 0
-    var rank: String = "Word Dabbler"
-    var nextRank: String = "Novice Scribe"
-    var progressToNextRank: Double = 0.0
 }
 
 struct TotalWordsView: View {
@@ -86,9 +87,9 @@ struct TotalWordsView: View {
     var body: some View {
         VStack(spacing: 8) {
             Text("\(totalWords)")
-                .font(.system(size: 48, weight: .bold))
+                .font(.system(size: 84, weight: .bold, design: .monospaced))
             Text("Total Words Written")
-                .font(.title2)
+                .font(.system(size: 18, weight: .medium, design: .monospaced))
         }
     }
 }
@@ -98,16 +99,14 @@ struct ComparisonTextView: View {
     
     var body: some View {
         Text(getComparisonText(totalWords: totalWords))
-            .font(.caption) // Changed from .body to .caption
+            .font(.system(size: 12, weight: .regular, design: .monospaced))
             .multilineTextAlignment(.center)
-            .padding(.horizontal) // Added horizontal padding
-            .padding(.vertical, 4) // Reduced vertical padding
+            .padding(.horizontal)
     }
     
     private func getComparisonText(totalWords: Int) -> String {
-        // Implement the comparison logic here
-        // This should return a string comparing the total words to a book or other milestone
-        return "That's almost as many words as 'The Great Gatsby' by F. Scott Fitzgerald (47,094 words)!"
+        // Implement comparison text logic
+        return "You've written \(totalWords) words. Keep it up!"
     }
 }
 
@@ -115,7 +114,7 @@ struct StatisticsGridView: View {
     let analytics: Analytics
     
     var body: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 20) {
             StatItem(title: "Day Streak", value: "\(analytics.streak)")
             StatItem(title: "Avg. Daily Words", value: "\(analytics.avgWordsPerDay)")
             StatItem(title: "Avg. Goal Time", value: analytics.avgGoalTime)
@@ -133,12 +132,13 @@ struct StatItem: View {
     let value: String
     
     var body: some View {
-        VStack {
+        VStack(spacing: 8) {
             Text(value)
-                .font(.title2.bold())
+                .font(.system(size: 24, weight: .bold, design: .monospaced))
             Text(title)
-                .font(.caption)
+                .font(.system(size: 12, weight: .regular, design: .monospaced))
                 .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
         }
     }
 }
@@ -146,30 +146,28 @@ struct StatItem: View {
 struct RankView: View {
     let rank: String
     let totalWords: Int
-    @State private var nextRank: String = "Novice Scribe"
-    @State private var progressToNextRank: Double = 0.5
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading) {
                     Text("Your current rank")
-                        .font(.caption)
+                        .font(.system(size: 12, weight: .regular, design: .monospaced))
                         .foregroundColor(.secondary)
                     Text(rank)
-                        .font(.title3.bold())
+                        .font(.system(size: 20, weight: .bold, design: .monospaced))
                 }
                 Spacer()
                 Image(systemName: "medal")
-                    .font(.title2)
+                    .font(.system(size: 32))
                     .foregroundColor(.yellow)
             }
             
-            ProgressView(value: progressToNextRank)
+            ProgressView(value: 0.5) // Replace with actual progress calculation
                 .progressViewStyle(LinearProgressViewStyle(tint: .blue))
             
-            Text("Only \(Int((1 - progressToNextRank) * 1000)) words to go! Keep writing to become a \"\(nextRank)\"!")
-                .font(.caption)
+            Text("Keep writing to reach the next rank!")
+                .font(.system(size: 12, weight: .regular, design: .monospaced))
                 .foregroundColor(.secondary)
         }
         .padding()
@@ -182,95 +180,17 @@ struct RankView: View {
 struct CalendarView: View {
     let entries: [WritingEntry]
     
-    @State private var currentDate = Date()
-    let calendar = Calendar.current
-    
     var body: some View {
         VStack {
-            Text(monthYearString(from: currentDate))
-                .font(.headline)
+            Text("Writing Calendar")
+                .font(.system(size: 16, weight: .medium, design: .monospaced))
             
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 8) {
-                ForEach(0..<7, id: \.self) { index in
-                    Text(weekdaySymbol(for: index))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                ForEach(Array(daysInMonth().enumerated()), id: \.offset) { index, day in
-                    if let day = day {
-                        CalendarDayView(day: day, hasEntry: hasEntry(for: day))
-                    } else {
-                        Text("")
-                            .frame(height: 30)
-                    }
-                }
-            }
+            // Implement calendar view here
+            Text("Calendar placeholder")
         }
         .padding()
         .background(Color.white)
         .cornerRadius(10)
         .shadow(radius: 5)
-    }
-    
-    func monthYearString(from date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM yyyy"
-        return formatter.string(from: date)
-    }
-    
-    func weekdaySymbol(for index: Int) -> String {
-        let symbols = calendar.veryShortWeekdaySymbols
-        return symbols[index]
-    }
-    
-    func daysInMonth() -> [Int?] {
-        guard let range = calendar.range(of: .day, in: .month, for: currentDate) else { return [] }
-        let numDays = range.count
-        
-        let firstWeekday = calendar.component(.weekday, from: currentDate)
-        var days: [Int?] = Array(repeating: nil, count: firstWeekday - 1)
-        days += Array(1...numDays)
-        
-        while days.count % 7 != 0 {
-            days.append(nil)
-        }
-        
-        return days
-    }
-    
-    func hasEntry(for day: Int) -> Bool {
-        let components = calendar.dateComponents([.year, .month], from: currentDate)
-        guard let date = calendar.date(from: components) else { return false }
-        let dayDate = calendar.date(byAdding: .day, value: day - 1, to: date)!
-        
-        return entries.contains { entry in
-            calendar.isDate(entry.date, inSameDayAs: dayDate)
-        }
-    }
-}
-
-struct CalendarDayView: View {
-    let day: Int
-    let hasEntry: Bool
-    
-    var body: some View {
-        ZStack {
-            Text("\(day)")
-                .frame(height: 30)
-                .font(.body)
-            
-            if hasEntry {
-                Image(systemName: "flame.fill")
-                    .foregroundColor(.orange)
-                    .font(.system(size: 20))
-            }
-        }
-    }
-}
-
-struct AnalyticsView_Previews: PreviewProvider {
-    static var previews: some View {
-        AnalyticsView()
     }
 }
