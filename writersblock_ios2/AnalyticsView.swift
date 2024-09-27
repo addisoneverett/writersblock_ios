@@ -5,7 +5,7 @@ struct Analytics {
     var streak: Int = 0
     var avgWordsPerDay: Int = 0
     var avgGoalTime: String = "00:00"
-    var totalPages: Int = 0
+    var wordRecord: Int = 0 // Changed from totalPages
     var rank: String = "Word Dabbler"
     var nextRank: String = "Novice Scribe"
     var progressToNextRank: Double = 0.0
@@ -36,7 +36,12 @@ struct AnalyticsView: View {
     }
     
     private func loadEntries() {
-        if let savedEntries = UserDefaults.standard.data(forKey: "writingEntries") {
+        if let savedFolders = UserDefaults.standard.data(forKey: "writingFolders") {
+            let decoder = JSONDecoder()
+            if let decodedFolders = try? decoder.decode([Folder].self, from: savedFolders) {
+                entries = decodedFolders.flatMap { $0.entries }
+            }
+        } else if let savedEntries = UserDefaults.standard.data(forKey: "writingEntries") {
             let decoder = JSONDecoder()
             if let decodedEntries = try? decoder.decode([WritingEntry].self, from: savedEntries) {
                 entries = decodedEntries
@@ -48,21 +53,63 @@ struct AnalyticsView: View {
         analytics.totalWords = entries.reduce(0) { $0 + $1.wordCount }
         analytics.streak = calculateStreak()
         analytics.avgWordsPerDay = calculateAverageWordsPerDay()
-        analytics.totalPages = analytics.totalWords / 250 // Assuming 250 words per page
+        analytics.avgGoalTime = calculateAverageGoalTime()
+        analytics.wordRecord = calculateWordRecord() // New function
         analytics.rank = calculateRank(totalWords: analytics.totalWords)
         analytics.nextRank = calculateNextRank(currentRank: analytics.rank)
         analytics.progressToNextRank = calculateProgressToNextRank(totalWords: analytics.totalWords, currentRank: analytics.rank)
     }
     
+    private func calculateAverageGoalTime() -> String {
+        let totalWords = entries.reduce(0) { $0 + $1.wordCount }
+        let averageWords = entries.isEmpty ? 0 : totalWords / entries.count
+        
+        // Assuming an average typing speed of 40 words per minute
+        let averageMinutes = Double(averageWords) / 40.0
+        let hours = Int(averageMinutes) / 60
+        let minutes = Int(averageMinutes) % 60
+        
+        return String(format: "%02d:%02d", hours, minutes)
+    }
+    
     private func calculateStreak() -> Int {
-        // Implement streak calculation logic
-        return 0
+        let calendar = Calendar.current
+        let sortedEntries = entries.sorted { $0.date > $1.date }
+        var streak = 0
+        var currentDate = Date()
+        
+        for entry in sortedEntries {
+            let entryDate = calendar.startOfDay(for: entry.date)
+            let daysApart = calendar.dateComponents([.day], from: entryDate, to: currentDate).day ?? 0
+            
+            if daysApart == streak {
+                streak += 1
+                currentDate = calendar.date(byAdding: .day, value: -1, to: currentDate)!
+            } else if daysApart > streak {
+                break
+            }
+        }
+        
+        return streak
     }
     
     private func calculateAverageWordsPerDay() -> Int {
         guard !entries.isEmpty else { return 0 }
-        let totalDays = Calendar.current.dateComponents([.day], from: entries.first!.date, to: Date()).day ?? 1
-        return analytics.totalWords / max(totalDays, 1)
+        let calendar = Calendar.current
+        let firstEntryDate = entries.map { $0.date }.min() ?? Date()
+        let daysSinceFirstEntry = calendar.dateComponents([.day], from: firstEntryDate, to: Date()).day ?? 1
+        let totalWords = entries.reduce(0) { $0 + $1.wordCount }
+        return totalWords / max(daysSinceFirstEntry, 1)
+    }
+    
+    private func calculateWordRecord() -> Int {
+        let groupedByDay = Dictionary(grouping: entries) { entry in
+            Calendar.current.startOfDay(for: entry.date)
+        }
+        let dailyWordCounts = groupedByDay.mapValues { entries in
+            entries.reduce(0) { $0 + $1.wordCount }
+        }
+        return dailyWordCounts.values.max() ?? 0
     }
     
     private func calculateRank(totalWords: Int) -> String {
@@ -118,7 +165,7 @@ struct StatisticsGridView: View {
             StatItem(title: "Day Streak", value: "\(analytics.streak)")
             StatItem(title: "Avg. Daily Words", value: "\(analytics.avgWordsPerDay)")
             StatItem(title: "Avg. Goal Time", value: analytics.avgGoalTime)
-            StatItem(title: "Total Pages", value: "\(analytics.totalPages)")
+            StatItem(title: "Word Record", value: "\(analytics.wordRecord)") // Changed from "Total Pages"
         }
         .padding()
         .background(Color.white)
