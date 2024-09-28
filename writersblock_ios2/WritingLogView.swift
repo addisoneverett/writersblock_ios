@@ -39,6 +39,9 @@ struct WritingLogView: View {
     @State private var selectedDateRange: DateRange = .allTime
     @State private var availableMonths: [Date] = []
     
+    @AppStorage("wordCountGoal") private var wordCountGoal = 500
+    @State private var hasReachedGoalToday = false
+    
     var menuItems: [String] {
         ["All Entries", "Folders"] + folders.filter { $0.name != "All Entries" }.map { $0.name }
     }
@@ -104,7 +107,10 @@ struct WritingLogView: View {
             }
         }
         .navigationBarHidden(true)
-        .onAppear(perform: loadFoldersAndEntries)
+        .onAppear {
+            loadFoldersAndEntries()
+            resetDailyGoal()
+        }
         .sheet(isPresented: $showingFilterOptions) {
             FilterView(selectedTags: $selectedTags,
                        selectedFolders: $selectedFolders,
@@ -140,7 +146,8 @@ struct WritingLogView: View {
                         folders[folderIndex].entries.remove(at: entryIndex)
                         saveFolders()
                         isEditViewPresented = false
-                    }
+                    },
+                    checkGoalReached: checkGoalReached // Pass the function here
                 )
             }
         }
@@ -272,6 +279,35 @@ struct WritingLogView: View {
         if let encoded = try? encoder.encode(folders) {
             UserDefaults.standard.set(encoded, forKey: "writingFolders")
         }
+        checkGoalReached() // Add this line
+        print("Folders saved and goal checked")
+    }
+
+    private func checkGoalReached() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let todayEntries = folders.flatMap { $0.entries }.filter { calendar.isDate($0.date, inSameDayAs: today) }
+        let todayWordCount = todayEntries.reduce(0) { $0 + $1.wordCount }
+        
+        print("Checking goal: Today's word count: \(todayWordCount), Goal: \(wordCountGoal), Has reached goal today: \(hasReachedGoalToday)")
+        
+        if todayWordCount >= wordCountGoal && !hasReachedGoalToday {
+            hasReachedGoalToday = true
+            let currentTime = Date()
+            AnalyticsView.updateGoalReachedTime(for: currentTime)
+            print("Goal reached at: \(currentTime)")
+        } else {
+            print("Goal not reached or already reached today")
+        }
+    }
+
+    private func resetDailyGoal() {
+        let calendar = Calendar.current
+        let now = Date()
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: now)!
+        if !calendar.isDate(now, inSameDayAs: yesterday) {
+            hasReachedGoalToday = false
+        }
     }
 }
 
@@ -377,13 +413,15 @@ struct EditEntryView: View {
     @State private var availableTags: [Tag] = []
     @State private var showDeleteConfirmation = false
     let onDelete: () -> Void
+    let checkGoalReached: () -> Void
 
-    init(entry: Binding<WritingEntry>, folders: [Folder], currentFolderId: UUID, onDelete: @escaping () -> Void) {
+    init(entry: Binding<WritingEntry>, folders: [Folder], currentFolderId: UUID, onDelete: @escaping () -> Void, checkGoalReached: @escaping () -> Void) {
         self._entry = entry
         self.folders = folders
         self._currentFolderId = State(initialValue: currentFolderId)
         self._selectedFolderId = State(initialValue: currentFolderId)
         self.onDelete = onDelete
+        self.checkGoalReached = checkGoalReached
     }
 
     var body: some View {
@@ -489,8 +527,8 @@ struct EditEntryView: View {
         entry.wordCount = text.split(separator: " ").count
         entry.tags = tags
 
-        // Note: We can't modify folders here as it's a let constant.
-        // The folder change should be handled in the parent view after dismissal.
+        checkGoalReached() // Call this function after saving changes
+        print("Changes saved and goal checked")
     }
 
     private func loadAvailableTags() {
