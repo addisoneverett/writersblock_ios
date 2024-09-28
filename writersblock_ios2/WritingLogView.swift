@@ -40,7 +40,7 @@ struct WritingLogView: View {
     @State private var availableMonths: [Date] = []
     
     var menuItems: [String] {
-        ["Folders", "All Entries"] + folders.filter { $0.name != "All Entries" }.map { $0.name }
+        ["All Entries", "Folders"] + folders.filter { $0.name != "All Entries" }.map { $0.name }
     }
 
     var body: some View {
@@ -96,9 +96,9 @@ struct WritingLogView: View {
 
             // Content based on selection
             if currentIndex == 0 {
-                foldersView
-            } else if currentIndex == 1 {
                 allEntriesView
+            } else if currentIndex == 1 {
+                foldersView
             } else {
                 folderView(folders[currentIndex - 2])
             }
@@ -132,7 +132,16 @@ struct WritingLogView: View {
                let entryId = selectedEntryId,
                let folderIndex = folders.firstIndex(where: { $0.id == folderId }),
                let entryIndex = folders[folderIndex].entries.firstIndex(where: { $0.id == entryId }) {
-                EditEntryView(entry: $folders[folderIndex].entries[entryIndex], folders: folders, currentFolderId: folderId)
+                EditEntryView(
+                    entry: $folders[folderIndex].entries[entryIndex],
+                    folders: folders,
+                    currentFolderId: folderId,
+                    onDelete: {
+                        folders[folderIndex].entries.remove(at: entryIndex)
+                        saveFolders()
+                        isEditViewPresented = false
+                    }
+                )
             }
         }
         .confirmationDialog("Are you sure you want to delete this entry?",
@@ -188,9 +197,6 @@ struct WritingLogView: View {
                     selectedFolderId = folders.first { $0.entries.contains(where: { $0.id == entry.id }) }?.id
                     selectedEntryId = entry.id
                     isEditViewPresented = true
-                }, onDelete: {
-                    entryToDelete = entry
-                    showDeleteConfirmation = true
                 })
             }
         }
@@ -209,9 +215,6 @@ struct WritingLogView: View {
                         selectedFolderId = folder.id
                         selectedEntryId = entry.id
                         isEditViewPresented = true
-                    }, onDelete: {
-                        entryToDelete = entry
-                        showDeleteConfirmation = true
                     })
                 }
             }
@@ -313,7 +316,6 @@ struct FolderStatsView: View {
 struct EntryCard: View {
     let entry: WritingEntry
     let onEdit: () -> Void
-    let onDelete: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -322,9 +324,17 @@ struct EntryCard: View {
                     .font(.headline)
                     .lineLimit(1)
                 Spacer()
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .foregroundColor(.red)
+                HStack(spacing: 2) {
+                    ForEach(entry.tags.prefix(3)) { tag in
+                        Image(systemName: "bookmark.fill")
+                            .foregroundColor(tag.color)
+                            .font(.system(size: 12))
+                    }
+                    if entry.tags.count > 3 {
+                        Text("+\(entry.tags.count - 3)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
             
@@ -343,22 +353,6 @@ struct EntryCard: View {
                 Text(entry.date, style: .date)
                     .font(.caption)
                     .foregroundColor(.gray)
-            }
-            
-            if !entry.tags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(entry.tags) { tag in
-                            Text(tag.name)
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(tag.color.opacity(0.2))
-                                .foregroundColor(tag.color)
-                                .cornerRadius(4)
-                        }
-                    }
-                }
             }
         }
         .padding()
@@ -381,12 +375,15 @@ struct EditEntryView: View {
     @State private var tags: [Tag] = []
     @State private var showTagSelection = false
     @State private var availableTags: [Tag] = []
+    @State private var showDeleteConfirmation = false
+    let onDelete: () -> Void
 
-    init(entry: Binding<WritingEntry>, folders: [Folder], currentFolderId: UUID) {
+    init(entry: Binding<WritingEntry>, folders: [Folder], currentFolderId: UUID, onDelete: @escaping () -> Void) {
         self._entry = entry
         self.folders = folders
         self._currentFolderId = State(initialValue: currentFolderId)
         self._selectedFolderId = State(initialValue: currentFolderId)
+        self.onDelete = onDelete
     }
 
     var body: some View {
@@ -444,6 +441,15 @@ struct EditEntryView: View {
                         }
                     }
                 }
+
+                Section {
+                    Button(action: {
+                        showDeleteConfirmation = true
+                    }) {
+                        Text("Delete Entry")
+                            .foregroundColor(.red)
+                    }
+                }
             }
             .navigationTitle("Edit Entry")
             .navigationBarItems(
@@ -455,6 +461,17 @@ struct EditEntryView: View {
                     presentationMode.wrappedValue.dismiss()
                 }
             )
+            .alert(isPresented: $showDeleteConfirmation) {
+                Alert(
+                    title: Text("Delete Entry"),
+                    message: Text("Are you sure you want to delete this entry? This action cannot be undone."),
+                    primaryButton: .destructive(Text("Delete")) {
+                        deleteEntry()
+                        presentationMode.wrappedValue.dismiss()
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
         }
         .sheet(isPresented: $showTagSelection) {
             TagSelectionView(availableTags: $availableTags, selectedTags: $tags)
@@ -483,6 +500,10 @@ struct EditEntryView: View {
                 availableTags = decodedTags
             }
         }
+    }
+
+    private func deleteEntry() {
+        onDelete()
     }
 }
 

@@ -13,20 +13,35 @@ struct SettingsView: View {
     @State private var tags: [Tag] = []  // Change this line
     @State private var newTag: String = ""
     @State private var showingTagManager = false
+    @State private var tempWordCountGoal = 500
+    @State private var tempResetDate = Date()
+    @State private var hasUnsavedChanges = false
 
     var body: some View {
         Form {
             Section(header: Text("Writing Goals")) {
-                Stepper("Daily Word Count Goal: \(wordCountGoal)", 
-                        value: $wordCountGoal, 
-                        in: 50...1000, 
-                        step: 50)
-                DatePicker("Daily Goal Reset Time", selection: $resetDate, displayedComponents: .hourAndMinute)
-                    .onChange(of: resetDate) { oldValue, newValue in
-                        let formatter = DateFormatter()
-                        formatter.timeStyle = .short
-                        resetTime = formatter.string(from: newValue)
+                HStack {
+                    Text("Daily Word Goal:")
+                    Spacer()
+                    Text("\(formattedWordCountGoal)")
+                    Stepper("", value: $tempWordCountGoal, in: 0...3000, step: stepValue)
+                        .labelsHidden()
+                        .scaleEffect(1.0)
+                        .padding(.leading, 10)
+                }
+                .onChange(of: tempWordCountGoal) { _, _ in
+                    hasUnsavedChanges = true
+                }
+                
+                DatePicker("Daily Goal Reset Time", selection: $tempResetDate, displayedComponents: .hourAndMinute)
+                    .onChange(of: tempResetDate) { _, _ in
+                        hasUnsavedChanges = true
                     }
+                
+                Button("Save Changes") {
+                    saveChanges()
+                }
+                .disabled(!hasUnsavedChanges)
             }
             
             Section {
@@ -71,12 +86,40 @@ struct SettingsView: View {
         }
         .navigationBarHidden(true)
         .onAppear {
+            initializeTempValues()
             checkScreenTimeAuthorization()
             loadTags()
         }
         .sheet(isPresented: $showingTagManager) {
             TagManagerView(tags: $tags)
         }
+    }
+
+    private var formattedWordCountGoal: String {
+        return "\(tempWordCountGoal)"
+    }
+
+    private var stepValue: Int {
+        return tempWordCountGoal < 100 ? 10 : 50
+    }
+
+    private func initializeTempValues() {
+        tempWordCountGoal = wordCountGoal
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        if let date = formatter.date(from: resetTime) {
+            tempResetDate = date
+        }
+    }
+
+    private func saveChanges() {
+        wordCountGoal = tempWordCountGoal
+        
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        resetTime = formatter.string(from: tempResetDate)
+        
+        hasUnsavedChanges = false
     }
 
     private func checkScreenTimeAuthorization() {

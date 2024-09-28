@@ -205,9 +205,15 @@ struct ContentView: View {
                                 showAccordionMenu = false
                             }
                         }
-                        Button("Generate Writing Prompt") {
-                            generatedPrompt = generateWritingPrompt()
-                            showPrompt = true
+                        Button("Add tags") {
+                            loadAvailableTags()
+                            showTagSelection = true
+                            withAnimation(.spring()) {
+                                showAccordionMenu = false
+                            }
+                        }
+                        Button("Add to Folder") {
+                            showFolderSelection = true
                             withAnimation(.spring()) {
                                 showAccordionMenu = false
                             }
@@ -219,15 +225,9 @@ struct ContentView: View {
                                 showAccordionMenu = false
                             }
                         }
-                        Button("Add tags") {
-                            loadAvailableTags()
-                            showTagSelection = true
-                            withAnimation(.spring()) {
-                                showAccordionMenu = false
-                            }
-                        }
-                        Button("Add to Folder") {
-                            showFolderSelection = true
+                        Button("Generate Writing Prompt") {
+                            generatedPrompt = generateWritingPrompt()
+                            showPrompt = true
                             withAnimation(.spring()) {
                                 showAccordionMenu = false
                             }
@@ -385,14 +385,16 @@ struct WritingEntry: Codable, Identifiable, Equatable {
     let date: Date
     var wordCount: Int
     var tags: [Tag]
+    var notes: String
     
-    init(id: UUID = UUID(), title: String, text: String, date: Date, wordCount: Int, tags: [Tag] = []) {
+    init(id: UUID = UUID(), title: String, text: String, date: Date, wordCount: Int, tags: [Tag] = [], notes: String = "") {
         self.id = id
         self.title = title
         self.text = text
         self.date = date
         self.wordCount = wordCount
         self.tags = tags
+        self.notes = notes
     }
 }
 
