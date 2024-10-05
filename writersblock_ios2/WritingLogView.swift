@@ -22,6 +22,7 @@ struct Folder: Identifiable, Codable {
 }
 
 struct WritingLogView: View {
+    @EnvironmentObject var writingStateManager: WritingStateManager
     @State private var folders: [Folder] = []
     @State private var selectedFolderId: UUID?
     @State private var selectedEntryId: UUID?
@@ -296,8 +297,14 @@ struct WritingLogView: View {
             let currentTime = Date()
             AnalyticsView.updateGoalReachedTime(for: currentTime)
             print("Goal reached at: \(currentTime)")
+            
+            // Update the goal history in WritingStateManager
+            writingStateManager.updateGoalHistory(date: today, achieved: true)
         } else {
             print("Goal not reached or already reached today")
+            
+            // Update the goal history even if the goal wasn't reached
+            writingStateManager.updateGoalHistory(date: today, achieved: false)
         }
     }
 

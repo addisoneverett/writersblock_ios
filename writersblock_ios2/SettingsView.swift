@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State private var tempWordCountGoal = 500
     @State private var tempResetDate = Date()
     @State private var hasUnsavedChanges = false
+    @State private var showingGoalHistory = false  // Add this line
 
     var body: some View {
         Form {
@@ -79,6 +80,12 @@ struct SettingsView: View {
             }
             
             Section {
+                Button("Goal History") {
+                    showingGoalHistory = true
+                }
+            }
+            
+            Section {
                 NavigationLink("Manage Subscription", destination: Text("Subscription Management"))
                 NavigationLink("Request a Feature", destination: Text("Feature Request"))
                 NavigationLink("Contact Us", destination: Text("Contact Information"))
@@ -92,6 +99,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showingTagManager) {
             TagManagerView(tags: $tags)
+        }
+        .sheet(isPresented: $showingGoalHistory) {
+            GoalHistoryView()
         }
     }
 
