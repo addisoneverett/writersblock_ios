@@ -17,6 +17,7 @@
 
 /* Begin PBXFileReference section */
 		F28BA0452C9A167800DF8ADF /* writersblock_ios2.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = writersblock_ios2.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F29552D82D079E4800EF49D5 /* writersblock_ios2.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = writersblock_ios2.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -56,6 +57,13 @@
 			isa = PBXGroup;
 			children = (
 				F28BA0452C9A167800DF8ADF /* writersblock_ios2.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		F29552D92D079E4800EF49D5 /* Products */ = {
+			isa = PBXGroup;
+			children = (
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -121,6 +129,12 @@
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F28BA0462C9A167800DF8ADF /* Products */;
 			projectDirPath = "";
+			projectReferences = (
+				{
+					ProductGroup = F29552D92D079E4800EF49D5 /* Products */;
+					ProjectRef = F29552D82D079E4800EF49D5 /* writersblock_ios2.xcodeproj */;
+				},
+			);
 			projectRoot = "";
 			targets = (
 				F28BA0442C9A167800DF8ADF /* writersblock_ios2 */,
